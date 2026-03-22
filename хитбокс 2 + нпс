@@ -1,0 +1,305 @@
+-- WIDE HUMANOID v9.0 - Увеличение NPC без столкновений (не лагает)
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+-- ========== ГУИ (ВЕЧНЫЙ) 50x120 ==========
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "WideHumanoidGUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 50, 0, 120)
+MainFrame.Position = UDim2.new(0, 15, 0, 70)
+MainFrame.BackgroundColor3 = Color3.fromRGB(40, 0, 40)
+MainFrame.BackgroundTransparency = 0.1
+MainFrame.Parent = ScreenGui
+
+local UICorner = Instance.new("UICorner", MainFrame)
+UICorner.CornerRadius = UDim.new(0, 8)
+
+local Title = Instance.new("TextLabel", MainFrame)
+Title.Size = UDim2.new(1, 0, 0, 15)
+Title.Text = "WIDE"
+Title.TextColor3 = Color3.fromRGB(220, 180, 255)
+Title.BackgroundTransparency = 1
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 10
+
+-- Кнопка 1: Для игроков
+local PlayerBtn = Instance.new("TextButton", MainFrame)
+PlayerBtn.Size = UDim2.new(0.8, 0, 0, 30)
+PlayerBtn.Position = UDim2.new(0.1, 0, 0, 18)
+PlayerBtn.Text = "1️⃣ ИГРОКИ"
+PlayerBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 150)
+PlayerBtn.TextColor3 = Color3.new(1, 1, 1)
+PlayerBtn.Font = Enum.Font.GothamBold
+PlayerBtn.TextSize = 9
+
+-- Кнопка 2: Для NPC (с отключением столкновений)
+local NPCBtn = Instance.new("TextButton", MainFrame)
+NPCBtn.Size = UDim2.new(0.8, 0, 0, 30)
+NPCBtn.Position = UDim2.new(0.1, 0, 0, 58)
+NPCBtn.Text = "2️⃣ NPC"
+NPCBtn.BackgroundColor3 = Color3.fromRGB(100, 0, 200)
+NPCBtn.TextColor3 = Color3.new(1, 1, 1)
+NPCBtn.Font = Enum.Font.GothamBold
+NPCBtn.TextSize = 9
+
+-- Кнопка закрытия
+local CloseBtn = Instance.new("TextButton", MainFrame)
+CloseBtn.Size = UDim2.new(0, 15, 0, 15)
+CloseBtn.Position = UDim2.new(1, -18, 0, 3)
+CloseBtn.Text = "✕"
+CloseBtn.BackgroundColor3 = Color3.fromRGB(100, 0, 0)
+CloseBtn.TextColor3 = Color3.new(1, 1, 1)
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 8
+
+-- Скругления
+local function addCorner(btn)
+    local corner = Instance.new("UICorner", btn)
+    corner.CornerRadius = UDim.new(0, 5)
+end
+addCorner(PlayerBtn)
+addCorner(NPCBtn)
+addCorner(CloseBtn)
+
+-- ========== ЛОГИКА ==========
+
+local PlayerActive = false
+local NPCActive = false
+local WIDTH_OFFSET = 25
+local processedPlayers = {}
+local processedNPCs = {}
+
+-- Проверка, является ли объект NPC
+local function isNPC(character)
+    if not character then return false end
+    if Players:GetPlayerFromCharacter(character) then return false end
+    if not character:FindFirstChildOfClass("Humanoid") then return false end
+    return true
+end
+
+-- Проверка, широкий ли уже объект
+local function isAlreadyWide(part)
+    if not part then return false end
+    return part.Size.X > 20 or part.Size.Z > 20
+end
+
+-- ========== ФУНКЦИЯ БЕЗОПАСНОГО РАСШИРЕНИЯ (без столкновений) ==========
+
+local function widenSafely(character, isNPC)
+    if not character then return end
+    if character == LocalPlayer.Character then return end
+    
+    -- Пропускаем уже обработанных
+    if isNPC then
+        if processedNPCs[character] then return end
+    end
+    
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    if not rootPart then return end
+    
+    -- Проверяем, не широкий ли уже
+    if isAlreadyWide(rootPart) then return end
+    
+    -- Расширяем
+    rootPart.Size = Vector3.new(
+        rootPart.Size.X + WIDTH_OFFSET,
+        rootPart.Size.Y,
+        rootPart.Size.Z + WIDTH_OFFSET
+    )
+    
+    -- Отключаем CanCollide у ВСЕХ частей этого персонажа
+    -- Это главная фишка - ты НЕ будешь биться об них
+    for _, part in pairs(character:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = false
+        end
+    end
+    
+    if isNPC then
+        processedNPCs[character] = true
+        print("✅ Расширен NPC: " .. character.Name)
+    else
+        local player = Players:GetPlayerFromCharacter(character)
+        if player then
+            processedPlayers[player] = true
+            print("✅ Расширен игрок: " .. character.Name)
+        end
+    end
+end
+
+-- ========== КНОПКА 1: ИГРОКИ ==========
+
+local function processAllPlayers()
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            widenSafely(player.Character, false)
+        end
+    end
+end
+
+local function onPlayerAdded(player)
+    if not PlayerActive then return end
+    if player == LocalPlayer then return end
+    
+    player.CharacterAdded:Connect(function(character)
+        if PlayerActive then
+            task.wait(0.5)
+            widenSafely(character, false)
+        end
+    end)
+    
+    if player.Character then
+        task.wait(0.5)
+        widenSafely(player.Character, false)
+    end
+end
+
+local function onPlayerCharacterAdded(character)
+    if not PlayerActive then return end
+    local player = Players:GetPlayerFromCharacter(character)
+    if not player or player == LocalPlayer then return end
+    task.wait(0.5)
+    widenSafely(character, false)
+end
+
+local function activatePlayerMode()
+    PlayerActive = true
+    PlayerBtn.Text = "✅ ИГРОКИ"
+    PlayerBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
+    print("👤 Режим ИГРОКОВ активирован (+" .. WIDTH_OFFSET .. ")")
+    
+    processAllPlayers()
+    
+    Players.PlayerAdded:Connect(onPlayerAdded)
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            player.CharacterAdded:Connect(onPlayerCharacterAdded)
+        end
+    end
+end
+
+local function deactivatePlayerMode()
+    PlayerActive = false
+    PlayerBtn.Text = "1️⃣ ИГРОКИ"
+    PlayerBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 150)
+    print("👤 Режим ИГРОКОВ деактивирован")
+end
+
+-- ========== КНОПКА 2: NPC ==========
+
+local function findAllNPCs()
+    local npcs = {}
+    for _, obj in pairs(workspace:GetDescendants()) do
+        if obj:IsA("Model") and isNPC(obj) then
+            table.insert(npcs, obj)
+        end
+    end
+    return npcs
+end
+
+local function processAllNPCs()
+    local npcs = findAllNPCs()
+    for _, npc in ipairs(npcs) do
+        widenSafely(npc, true)
+    end
+    print("🤖 Найдено NPC: " .. #npcs)
+end
+
+local function watchForNewNPCs()
+    workspace.DescendantAdded:Connect(function(obj)
+        if not NPCActive then return end
+        task.wait(0.5)
+        if obj:IsA("Model") and isNPC(obj) then
+            widenSafely(obj, true)
+        end
+    end)
+end
+
+local function activateNPCMode()
+    NPCActive = true
+    NPCBtn.Text = "✅ NPC"
+    NPCBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
+    print("🤖 Режим NPC активирован (+" .. WIDTH_OFFSET .. ")")
+    print("🛡️ Столкновения с NPC отключены!")
+    
+    processAllNPCs()
+    watchForNewNPCs()
+end
+
+local function deactivateNPCMode()
+    NPCActive = false
+    NPCBtn.Text = "2️⃣ NPC"
+    NPCBtn.BackgroundColor3 = Color3.fromRGB(100, 0, 200)
+    print("🤖 Режим NPC деактивирован")
+end
+
+-- ========== КНОПКИ ==========
+
+PlayerBtn.MouseButton1Click:Connect(function()
+    if PlayerActive then
+        deactivatePlayerMode()
+    else
+        activatePlayerMode()
+    end
+end)
+
+NPCBtn.MouseButton1Click:Connect(function()
+    if NPCActive then
+        deactivateNPCMode()
+    else
+        activateNPCMode()
+    end
+end)
+
+CloseBtn.MouseButton1Click:Connect(function()
+    PlayerActive = false
+    NPCActive = false
+    ScreenGui:Destroy()
+end)
+
+-- Drag GUI
+local dragging, dragStart, startPos
+local dragInput = nil
+
+MainFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = MainFrame.Position
+        
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+MainFrame.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement then
+        dragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        MainFrame.Position = UDim2.new(
+            startPos.X.Scale,
+            startPos.X.Offset + delta.X,
+            startPos.Y.Scale,
+            startPos.Y.Offset + delta.Y
+        )
+    end
+end)
+
+print("📏 WIDE HUMANOID v9.0 - БЕЗ СТОЛКНОВЕНИЙ")
+print("1️⃣ - увеличивает ИГРОКОВ (+25)")
+print("2️⃣ - увеличивает NPC (+25)")
+print("🛡️ Ты НЕ бьешься об увеличенные NPC!")
